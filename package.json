@@ -1,6 +1,6 @@
 {
   "name": "oliver-downloader",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "App desktop local para baixar videos publicos do YouTube.",
   "main": "out/main/index.js",
   "author": "Oliver Downloader",
