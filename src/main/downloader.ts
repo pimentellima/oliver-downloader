@@ -1,5 +1,4 @@
 import { BrowserWindow } from 'electron'
-import ffmpeg from '@ffmpeg-installer/ffmpeg'
 import { ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
 import { existsSync, statSync } from 'node:fs'
 import { mkdir, readdir, rm } from 'node:fs/promises'
@@ -13,7 +12,7 @@ import {
   resetForRetry,
   updateDownload
 } from './database'
-import { ensureYtDlpAvailable, getBinaryStatus, setQueueBusy } from './binaries'
+import { ensureYtDlpAvailable, getBinaryStatus, getFfmpegPath, setQueueBusy } from './binaries'
 import { sanitizeYoutubeUrl } from './url'
 import type { AnalyzedVideo, DownloadEvent, DownloadItem } from '../shared/contracts'
 
@@ -136,12 +135,18 @@ async function runDownload(item: DownloadItem): Promise<void> {
   const args = [
     '--no-playlist',
     '--newline',
+    '--progress',
+    '--progress-delta',
+    '0.2',
+    '--no-color',
     '--progress-template',
     'download:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s',
     '-f',
     'bv*[vcodec^=avc1]+ba[acodec^=mp4a]/b[ext=mp4][vcodec^=avc1][acodec^=mp4a]/bv*+ba/b',
     '--merge-output-format',
     'mp4',
+    '--ffmpeg-location',
+    getFfmpegPath(),
     '-o',
     workingTemplate,
     item.canonicalUrl
@@ -152,29 +157,43 @@ async function runDownload(item: DownloadItem): Promise<void> {
     activeProcess = child
     let stderr = ''
     let stdout = ''
+    let stdoutBuffer = ''
+    let stderrBuffer = ''
+    let settled = false
+
+    child.on('error', (error) => {
+      if (settled) return
+      settled = true
+      activeProcess = null
+      const failed = updateDownload(item.id, {
+        status: 'failed',
+        phase: 'error',
+        speed: null,
+        eta: null,
+        errorSummary: 'Não foi possível executar o yt-dlp.',
+        errorDetails: error.message
+      })
+      emit(failed)
+      resolve()
+    })
 
     child.stdout.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString()
-      for (const line of chunk.toString().split(/\r?\n/)) {
-        const parsed = parseProgress(line)
-        if (parsed) {
-          current = updateDownload(item.id, {
-            status: parsed.phase === 'merge' ? 'converting' : 'downloading',
-            phase: parsed.phase,
-            progress: parsed.progress,
-            speed: parsed.speed,
-            eta: parsed.eta
-          })
-          emit(current)
-        }
-      }
+      const text = chunk.toString()
+      stdout += text
+      stdoutBuffer = consumeLines(stdoutBuffer + text, handleOutputLine)
     })
 
     child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString()
+      const text = chunk.toString()
+      stderr += text
+      stderrBuffer = consumeLines(stderrBuffer + text, handleOutputLine)
     })
 
     child.on('close', (code) => {
+      if (settled) return
+      settled = true
+      if (stdoutBuffer) handleOutputLine(stdoutBuffer)
+      if (stderrBuffer) handleOutputLine(stderrBuffer)
       activeProcess = null
       if (getDownload(item.id).status === 'cancelled') {
         resolve()
@@ -195,6 +214,20 @@ async function runDownload(item: DownloadItem): Promise<void> {
         emit(failed)
       }
     })
+
+    function handleOutputLine(line: string): void {
+      const parsed = parseProgress(line)
+      if (!parsed) return
+
+      current = updateDownload(item.id, {
+        status: parsed.phase === 'merge' ? 'converting' : 'downloading',
+        phase: parsed.phase,
+        progress: parsed.progress,
+        speed: parsed.speed,
+        eta: parsed.eta
+      })
+      emit(current)
+    }
   })
 
   const afterDownload = getDownload(item.id)
@@ -255,6 +288,9 @@ function execJson(command: string, args: string[]): Promise<Record<string, unkno
     child.stderr.on('data', (chunk) => {
       stderr += chunk.toString()
     })
+    child.on('error', (error) => {
+      reject(new Error(`Não foi possível executar o yt-dlp: ${error.message}`))
+    })
     child.on('close', (code) => {
       if (code !== 0) {
         reject(new Error(summarizeError(stderr || stdout)))
@@ -272,19 +308,40 @@ function execJson(command: string, args: string[]): Promise<Record<string, unkno
 function parseProgress(line: string):
   | { phase: 'download' | 'merge'; progress: number | null; speed: string | null; eta: string | null }
   | null {
-  if (line.includes('[Merger]') || line.includes('[VideoRemuxer]')) {
+  const cleanLine = stripAnsi(line).trim()
+
+  if (cleanLine.includes('[Merger]') || cleanLine.includes('[VideoRemuxer]')) {
     return { phase: 'merge', progress: null, speed: null, eta: null }
   }
 
-  if (!line.startsWith('download:')) return null
-  const [percent, speed, eta] = line.replace(/^download:/, '').split('|')
+  const markerIndex = cleanLine.indexOf('download:')
+  if (markerIndex === -1) return null
+
+  const [percent, speed, eta] = cleanLine.slice(markerIndex + 'download:'.length).split('|')
   const progress = Number.parseFloat(percent.replace('%', '').trim())
   return {
     phase: 'download',
     progress: Number.isFinite(progress) ? Math.max(0, Math.min(100, progress)) : null,
-    speed: speed?.trim() || null,
-    eta: eta?.trim() || null
+    speed: normalizeProgressValue(speed),
+    eta: normalizeProgressValue(eta)
   }
+}
+
+function consumeLines(value: string, onLine: (line: string) => void): string {
+  const lines = value.split(/\r?\n/)
+  const remainder = lines.pop() ?? ''
+  for (const line of lines) onLine(line)
+  return remainder
+}
+
+function normalizeProgressValue(value: string | undefined): string | null {
+  const normalized = value?.trim()
+  if (!normalized || normalized === 'NA' || normalized === 'Unknown') return null
+  return normalized
+}
+
+function stripAnsi(value: string): string {
+  return value.replace(/\u001b\[[0-9;]*m/g, '')
 }
 
 async function uniqueOutputPath(directory: string, title: string): Promise<string> {
@@ -339,15 +396,34 @@ function convertForQuickTime(downloadId: number, inputPath: string, outputPath: 
       outputPath
     ]
 
-    const child = spawn(ffmpeg.path, args, { windowsHide: true })
+    const child = spawn(getFfmpegPath(), args, { windowsHide: true })
     activeProcess = child
     let stderr = ''
+    let settled = false
 
     child.stderr.on('data', (chunk: Buffer) => {
       stderr += chunk.toString()
     })
 
+    child.on('error', (error) => {
+      if (settled) return
+      settled = true
+      activeProcess = null
+      const failed = updateDownload(downloadId, {
+        status: 'failed',
+        phase: 'error',
+        speed: null,
+        eta: null,
+        errorSummary: 'Não foi possível executar o ffmpeg.',
+        errorDetails: error.message
+      })
+      emit(failed)
+      void rm(outputPath, { force: true }).finally(() => resolve(false))
+    })
+
     child.on('close', (code) => {
+      if (settled) return
+      settled = true
       activeProcess = null
 
       if (getDownload(downloadId).status === 'cancelled') {

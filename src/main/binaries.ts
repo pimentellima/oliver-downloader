@@ -12,13 +12,19 @@ import type { BinaryStatus } from '../shared/contracts'
 const execFileAsync = promisify(execFile)
 const ONE_HOUR_MS = 60 * 60 * 1000
 
+// No app empacotado, ffmpeg.path aponta para dentro do app.asar (caminho virtual);
+// spawn não enxerga o asar, então o binário real fica em app.asar.unpacked.
+export function getFfmpegPath(): string {
+  return ffmpeg.path.replace('app.asar', 'app.asar.unpacked')
+}
+
 let status: BinaryStatus = {
   ytdlpPath: null,
   ytdlpVersion: null,
   ytdlpUpdateState: 'idle',
   ytdlpLatestVersion: null,
   ytdlpLastCheckedAt: null,
-  ffmpegPath: ffmpeg.path,
+  ffmpegPath: getFfmpegPath(),
   message: null
 }
 
@@ -42,7 +48,7 @@ export function getBinaryStatus(): BinaryStatus {
   status = {
     ...status,
     ytdlpPath: resolveYtDlpPath(),
-    ffmpegPath: ffmpeg.path
+    ffmpegPath: getFfmpegPath()
   }
   return { ...status }
 }
