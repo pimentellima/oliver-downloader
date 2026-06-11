@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
+import type { MenuItemConstructorOptions } from 'electron'
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -62,6 +63,26 @@ function createWindow(): void {
 
   setDownloadWindow(mainWindow)
   setAppUpdateWindow(mainWindow)
+
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    const items: MenuItemConstructorOptions[] = []
+
+    if (params.isEditable) {
+      items.push(
+        { label: 'Cortar', role: 'cut', enabled: params.editFlags.canCut },
+        { label: 'Copiar', role: 'copy', enabled: params.editFlags.canCopy },
+        { label: 'Colar', role: 'paste', enabled: params.editFlags.canPaste },
+        { type: 'separator' },
+        { label: 'Selecionar tudo', role: 'selectAll', enabled: params.editFlags.canSelectAll }
+      )
+    } else if (params.selectionText.trim()) {
+      items.push({ label: 'Copiar', role: 'copy' })
+    }
+
+    if (items.length > 0) {
+      Menu.buildFromTemplate(items).popup()
+    }
+  })
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show()
