@@ -1,9 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
 import type { MenuItemConstructorOptions } from 'electron'
-import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import {
   migrate,
   deleteDownloadRecord,
@@ -190,40 +188,12 @@ function registerIpc(): void {
 }
 
 async function openDirectoryInFileManager(path: string): Promise<void> {
-  if (process.platform === 'darwin') {
-    await execFileAsync('open', [path])
-    return
-  }
-
-  if (process.platform === 'win32') {
-    await execFileAsync('explorer.exe', [path])
-    return
-  }
-
-  await shell.openExternal(pathToFileURL(path).toString())
+  const error = await shell.openPath(path)
+  if (error) throw new Error(error)
 }
 
 async function showItemInFileManager(path: string): Promise<void> {
-  if (process.platform === 'darwin') {
-    await execFileAsync('open', ['-R', path])
-    return
-  }
-
-  if (process.platform === 'win32') {
-    await execFileAsync('explorer.exe', [`/select,${path}`])
-    return
-  }
-
   shell.showItemInFolder(path)
-}
-
-function execFileAsync(command: string, args: string[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    execFile(command, args, (error) => {
-      if (error) reject(error)
-      else resolve()
-    })
-  })
 }
 
 app.whenReady().then(async () => {
