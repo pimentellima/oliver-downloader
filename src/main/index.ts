@@ -124,10 +124,13 @@ function registerIpc(): void {
   ipcMain.handle('downloads:cancel', (_event, id: number) => cancelDownload(id))
   ipcMain.handle('downloads:retry', (_event, id: number) => retryDownload(id))
   ipcMain.handle('downloads:list', () => listDownloads())
-  ipcMain.handle('downloads:deleteRecord', (_event, id: number) => {
+  ipcMain.handle('downloads:deleteRecord', async (_event, id: number) => {
     const item = getDownload(id)
     if (['analyzing', 'downloading', 'converting'].includes(item.status)) {
       throw new Error('Cancele o download antes de remover da lista.')
+    }
+    if (item.outputPath && existsSync(item.outputPath)) {
+      await shell.trashItem(item.outputPath)
     }
     deleteDownloadRecord(id)
     mainWindow?.webContents.send('downloads:event', { deletedId: id, binaryStatus: getBinaryStatus() })

@@ -384,17 +384,12 @@ function DownloadRow({ item, onRefresh }: { item: DownloadItem; onRefresh: () =>
     }
   }
 
-  async function deleteFile(): Promise<void> {
-    if (!item.outputPath) return
+  async function remove(): Promise<void> {
     const confirmed = window.confirm(
-      'Enviar este arquivo para a lixeira? Depois você poderá baixar novamente ou remover este item da lista.'
+      item.outputPath
+        ? 'Remover este vídeo? O arquivo vai para a lixeira e o item sai da fila e do histórico.'
+        : 'Remover este item da fila e do histórico?'
     )
-    if (!confirmed) return
-    await window.oliver.deleteDownloadedFile(item.id)
-  }
-
-  async function removeRecord(): Promise<void> {
-    const confirmed = window.confirm('Remover este item da fila e do histórico?')
     if (!confirmed) return
     try {
       if (typeof window.oliver.deleteDownloadRecord !== 'function') {
@@ -463,13 +458,8 @@ function DownloadRow({ item, onRefresh }: { item: DownloadItem; onRefresh: () =>
             <Play className="h-4 w-4" />
           </Button>
         )}
-        {done && item.outputPath && (
-          <Button size="icon" variant="destructive" onClick={deleteFile} title="Excluir arquivo">
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        )}
-        {fileRemoved && (
-          <Button size="icon" variant="destructive" onClick={removeRecord} title="Remover da fila e do histórico">
+        {!active && item.status !== 'analyzing' && (
+          <Button size="icon" variant="destructive" onClick={remove} title="Remover da fila e do histórico (exclui o arquivo)">
             <Trash2 className="h-4 w-4" />
           </Button>
         )}
