@@ -4,6 +4,7 @@ import { existsSync, statSync } from 'node:fs'
 import { mkdir, readdir, rename } from 'node:fs/promises'
 import { extname, join } from 'node:path'
 import {
+  findDownloadByVideoId,
   getDownload,
   getSettings,
   insertDownload,
@@ -47,7 +48,14 @@ export async function analyzeUrl(inputUrl: string): Promise<AnalyzedVideo> {
 }
 
 export async function enqueueDownload(video: AnalyzedVideo): Promise<DownloadItem> {
-  const item = insertDownload(video)
+  const existing = findDownloadByVideoId(video.videoId)
+  const shouldRevive =
+    existing &&
+    (existing.status === 'cancelled' ||
+      existing.status === 'failed' ||
+      (existing.status === 'completed' && !existing.outputPath))
+
+  const item = shouldRevive ? resetForRetry(existing.id) : insertDownload(video)
   emit(item)
   void runQueue()
   return item

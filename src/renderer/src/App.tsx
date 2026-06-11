@@ -484,9 +484,9 @@ function StatusBadge({ item }: { item: DownloadItem }): JSX.Element {
     analyzing: 'border-primary/40 bg-primary/10 text-primary'
   }[item.status]
   return (
-    <Badge className={tone}>
-      {item.status === 'completed' && <CheckCircle2 className="mr-1 h-3 w-3" />}
-      {['downloading', 'converting'].includes(item.status) && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+    <Badge className={`${tone} h-8 shrink-0 px-3 py-0`}>
+      {item.status === 'completed' && <CheckCircle2 className="mr-2 h-4 w-4" />}
+      {['downloading', 'converting'].includes(item.status) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
       {statusLabel(item.status)}
     </Badge>
   )
