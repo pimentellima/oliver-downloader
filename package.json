@@ -71,7 +71,8 @@
     "publish": {
       "provider": "github",
       "owner": "pimentellima",
-      "repo": "oliver-downloader"
+      "repo": "oliver-downloader",
+      "releaseType": "release"
     },
     "mac": {
       "target": "dmg"
