@@ -1,8 +1,8 @@
 import { BrowserWindow } from 'electron'
 import { ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
 import { existsSync, statSync } from 'node:fs'
-import { mkdir, readdir, rm } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, readdir, rename } from 'node:fs/promises'
+import { extname, join } from 'node:path'
 import {
   getDownload,
   getSettings,
@@ -119,7 +119,6 @@ async function runDownload(item: DownloadItem): Promise<void> {
   const downloadDirectory = getSettings().downloadDirectory
   await mkdir(downloadDirectory, { recursive: true })
 
-  const finalPath = await uniqueOutputPath(downloadDirectory, item.title)
   const workingTemplate = join(downloadDirectory, `.oliver-${item.id}-%(title).80s.%(ext)s`)
   let current = updateDownload(item.id, {
     status: 'downloading',
@@ -240,26 +239,15 @@ async function runDownload(item: DownloadItem): Promise<void> {
       phase: 'error',
       speed: null,
       eta: null,
-      errorSummary: 'Não foi possível encontrar o arquivo baixado para conversão.',
+      errorSummary: 'Não foi possível encontrar o arquivo baixado.',
       errorDetails: null
     })
     emit(failed)
     return
   }
 
-  current = updateDownload(item.id, {
-    status: 'converting',
-    phase: 'merge',
-    progress: null,
-    speed: null,
-    eta: null
-  })
-  emit(current)
-
-  const converted = await convertForQuickTime(item.id, downloadedPath, finalPath)
-  if (!converted) return
-
-  await rm(downloadedPath, { force: true })
+  const finalPath = await uniqueOutputPath(downloadDirectory, item.title, extname(downloadedPath) || '.mp4')
+  await rename(downloadedPath, finalPath)
   const completed = refreshCompletedFileSize(
     updateDownload(item.id, {
       status: 'completed',
@@ -344,14 +332,14 @@ function stripAnsi(value: string): string {
   return value.replace(/\u001b\[[0-9;]*m/g, '')
 }
 
-async function uniqueOutputPath(directory: string, title: string): Promise<string> {
+async function uniqueOutputPath(directory: string, title: string, extension: string): Promise<string> {
   const safeTitle = sanitizeFileName(title) || 'video'
   const files = new Set(await readdir(directory).catch(() => []))
-  let candidate = `${safeTitle}.mp4`
+  let candidate = `${safeTitle}${extension}`
   let index = 2
 
   while (files.has(candidate)) {
-    candidate = `${safeTitle} (${index}).mp4`
+    candidate = `${safeTitle} (${index})${extension}`
     index += 1
   }
 
@@ -367,87 +355,6 @@ async function findNewestWorkingFile(directory: string, downloadId: number): Pro
     .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)
 
   return candidates[0] ?? null
-}
-
-function convertForQuickTime(downloadId: number, inputPath: string, outputPath: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const args = [
-      '-y',
-      '-i',
-      inputPath,
-      '-map',
-      '0:v:0',
-      '-map',
-      '0:a:0?',
-      '-c:v',
-      'libx264',
-      '-preset',
-      'medium',
-      '-crf',
-      '20',
-      '-pix_fmt',
-      'yuv420p',
-      '-c:a',
-      'aac',
-      '-b:a',
-      '192k',
-      '-movflags',
-      '+faststart',
-      outputPath
-    ]
-
-    const child = spawn(getFfmpegPath(), args, { windowsHide: true })
-    activeProcess = child
-    let stderr = ''
-    let settled = false
-
-    child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString()
-    })
-
-    child.on('error', (error) => {
-      if (settled) return
-      settled = true
-      activeProcess = null
-      const failed = updateDownload(downloadId, {
-        status: 'failed',
-        phase: 'error',
-        speed: null,
-        eta: null,
-        errorSummary: 'Não foi possível executar o ffmpeg.',
-        errorDetails: error.message
-      })
-      emit(failed)
-      void rm(outputPath, { force: true }).finally(() => resolve(false))
-    })
-
-    child.on('close', (code) => {
-      if (settled) return
-      settled = true
-      activeProcess = null
-
-      if (getDownload(downloadId).status === 'cancelled') {
-        void rm(outputPath, { force: true }).finally(() => resolve(false))
-        return
-      }
-
-      if (code === 0) {
-        resolve(true)
-        return
-      }
-
-      const failed = updateDownload(downloadId, {
-        status: 'failed',
-        phase: 'error',
-        speed: null,
-        eta: null,
-        errorSummary: 'Falha ao converter o vídeo para um formato compatível.',
-        errorDetails: stderr.trim()
-      })
-      emit(failed)
-      void rm(outputPath, { force: true }).finally(() => resolve(false))
-    })
-  })
 }
 
 function sanitizeFileName(name: string): string {
