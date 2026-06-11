@@ -12,10 +12,12 @@
     "preview": "electron-vite preview",
     "dist": "pnpm build && electron-builder",
     "rebuild:native": "electron-builder install-app-deps",
-    "prepare:binaries": "node scripts/prepare-binaries.mjs"
+    "prepare:binaries": "node scripts/prepare-binaries.mjs",
+    "prepare:binaries:win": "node scripts/prepare-binaries.mjs --target=win32"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@ffmpeg-installer/win32-x64": "^4.1.0",
     "@radix-ui/react-slot": "^1.2.3",
     "better-sqlite3": "^11.10.0",
     "class-variance-authority": "^0.7.1",
@@ -66,16 +68,22 @@
         ]
       }
     ],
+    "publish": {
+      "provider": "github",
+      "owner": "pimentellima",
+      "repo": "oliver-downloader"
+    },
     "mac": {
       "target": "dmg"
     },
     "win": {
-      "target": "nsis",
-      "publish": {
-        "provider": "github",
-        "owner": "pimentellima",
-        "repo": "oliver-downloader"
-      }
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": false,
+      "perMachine": false,
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     }
   },
   "pnpm": {

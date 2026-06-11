@@ -7,7 +7,8 @@ const root = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 const binDir = join(root, 'resources', 'bin')
 mkdirSync(binDir, { recursive: true })
 
-const fileName = process.platform === 'win32' ? 'yt-dlp.exe' : process.platform === 'darwin' ? 'yt-dlp_macos' : 'yt-dlp'
+const target = process.argv.find((argument) => argument.startsWith('--target='))?.split('=')[1] ?? process.platform
+const fileName = target === 'win32' ? 'yt-dlp.exe' : target === 'darwin' ? 'yt-dlp_macos' : 'yt-dlp'
 const destination = join(binDir, fileName)
 
 if (existsSync(destination)) {
@@ -22,7 +23,7 @@ if (!asset) {
 }
 
 await download(asset.browser_download_url, destination)
-if (process.platform !== 'win32') chmodSync(destination, 0o755)
+if (target !== 'win32') chmodSync(destination, 0o755)
 console.log(`yt-dlp salvo em ${destination}`)
 
 function fetchJson(url) {
