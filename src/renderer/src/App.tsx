@@ -439,28 +439,33 @@ function DownloadRow({ item, onRefresh }: { item: DownloadItem; onRefresh: () =>
 
       <div className="download-row-actions">
         {active && (
-          <Button size="icon" variant="destructive" onClick={cancel} title="Cancelar">
+          <Button size="sm" variant="destructive" onClick={cancel}>
             <Square className="h-4 w-4" />
+            Cancelar
           </Button>
         )}
         {(failed || item.status === 'cancelled' || fileRemoved) && (
-          <Button size="icon" variant="secondary" onClick={retry} title="Repetir">
+          <Button size="sm" variant="secondary" onClick={retry}>
             <RotateCcw className="h-4 w-4" />
+            Repetir
           </Button>
         )}
         {done && item.outputPath && (
-          <Button size="icon" variant="outline" onClick={showInFolder} title="Mostrar no Finder ou Explorer">
+          <Button size="sm" variant="outline" onClick={showInFolder} title="Mostrar o arquivo no Finder ou Explorer">
             <FolderOpen className="h-4 w-4" />
+            Abrir pasta
           </Button>
         )}
         {done && item.outputPath && (
-          <Button size="icon" variant="outline" onClick={playFile} title="Reproduzir">
+          <Button size="sm" variant="outline" onClick={playFile}>
             <Play className="h-4 w-4" />
+            Reproduzir
           </Button>
         )}
         {!active && item.status !== 'analyzing' && (
-          <Button size="icon" variant="destructive" onClick={remove} title="Remover da fila e do histórico (exclui o arquivo)">
+          <Button size="sm" variant="destructive" onClick={remove} title="Remover da fila e do histórico (exclui o arquivo)">
             <Trash2 className="h-4 w-4" />
+            Excluir
           </Button>
         )}
       </div>

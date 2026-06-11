@@ -144,7 +144,7 @@ body {
   display: flex;
   flex: 0 0 auto;
   gap: 8px;
-  max-width: 204px;
+  max-width: 248px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
